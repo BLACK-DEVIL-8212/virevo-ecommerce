@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'];
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin';
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isUser(userId) || isAdmin();
+      allow delete: if isSuperAdmin();
+
+      // Prevent users from changing their own role
+      allow update: if isUser(userId) && request.resource.data.role == resource.data.role;
+    }
+
+    // Products - readable by all, writable by admin/superadmin
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Categories - readable by all, writable by admin/superadmin
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Cart - only accessible by the owner
+    match /carts/{userId} {
+      allow read: if isUser(userId);
+      allow write: if isUser(userId);
+      allow delete: if isUser(userId);
+    }
+
+    // Wishlist - only accessible by the owner
+    match /wishlists/{userId} {
+      allow read: if isUser(userId);
+      allow write: if isUser(userId);
+      allow delete: if isUser(userId);
+    }
+
+    // Orders - users can read their own, admins can read all
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Reviews - readable by all, writable by authenticated users
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin() || resource.data.userId == request.auth.uid;
+    }
+
+    // Coupons - readable by all, writable by admin
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Site settings - readable by all, writable by admin/superadmin
+    match /siteSettings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Notifications - only accessible by the owner
+    match /notifications/{userId}/{notificationId} {
+      allow read: if isUser(userId);
+      allow write: if isUser(userId);
+      allow delete: if isUser(userId);
+    }
+
+    // Contact requests - readable by admin/superadmin
+    match /contactRequests/{requestId} {
+      allow read: if isAdmin();
+      allow write: if isAuthenticated();
+    }
+
+    // Audit logs - readable by admin/superadmin
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Banners - readable by all, writable by admin
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
